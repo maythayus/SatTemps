@@ -26,47 +26,51 @@ data class Satellite(
     val hasEphemeris: Boolean
 )
 
+/** Cause d'indisponibilite du recepteur, traduite dans l'interface. */
+enum class GnssIssue {
+    NO_SERVICE,
+    PERMISSION_DENIED,
+    RECEIVER_UNAVAILABLE,
+    LOCATION_DISABLED,
+    SEARCHING,
+    SIGNAL_LOST
+}
+
 data class GnssState(
     val location: Location? = null,
     val satellites: List<Satellite> = emptyList(),
     val satellitesUsed: Int = 0,
-    val hasFix: Boolean = false
+    val hasFix: Boolean = false,
+    /** Le service de localisation du telephone est actif. */
+    val gpsEnabled: Boolean = true,
+    /** Le recepteur est demarre et l'application ecoute les mises a jour. */
+    val listening: Boolean = false,
+    /** Age du dernier fix en secondes, `null` si aucun fix. */
+    val fixAgeSeconds: Long? = null,
+    /** Probleme courant empechant une mesure fiable, `null` si tout va bien. */
+    val issue: GnssIssue? = null
 ) {
     /** Satellite offrant le meilleur signal parmi ceux au dessus de l'horizon. */
-    val bestSatellite: Satellite?
-        get() = satellites.filter { it.elevationDeg > 5f }.maxByOrNull { it.cn0DbHz }
+    val bestSatellite: Satellite? get() = SkyAnalysis.bestSatellite(satellites)
 
-    /**
-     * Direction ou le ciel est le mieux degage : moyenne vectorielle des azimuts
-     * des satellites recus, ponderee par la qualite du signal.
-     */
-    val bestSkyAzimuthDeg: Float?
-        get() {
-            val visible = satellites.filter { it.cn0DbHz > 0f && it.elevationDeg > 5f }
-            if (visible.isEmpty()) return null
-            var x = 0.0
-            var y = 0.0
-            visible.forEach { sat ->
-                val weight = sat.cn0DbHz.toDouble() * Math.cos(Math.toRadians(sat.elevationDeg.toDouble()))
-                val rad = Math.toRadians(sat.azimuthDeg.toDouble())
-                x += weight * Math.cos(rad)
-                y += weight * Math.sin(rad)
-            }
-            if (x == 0.0 && y == 0.0) return null
-            return ((Math.toDegrees(Math.atan2(y, x)) + 360.0) % 360.0).toFloat()
-        }
+    /** Direction ou le ciel est le mieux degage, ponderee par la qualite du signal. */
+    val bestSkyAzimuthDeg: Float? get() = SkyAnalysis.bestSkyAzimuthDeg(satellites)
 
-    val meanElevationDeg: Float?
-        get() = satellites.filter { it.cn0DbHz > 0f }.map { it.elevationDeg }.average()
-            .takeIf { !it.isNaN() }?.toFloat()
+    val meanElevationDeg: Float? get() = SkyAnalysis.meanElevationDeg(satellites)
 }
 
-/** Ecoute le GPS : position, temps satellite et etat de la constellation. */
+/**
+ * Ecoute le GPS : position, temps satellite et etat de la constellation.
+ *
+ * Toutes les entrees systeme sont protegees : un service de localisation desactive,
+ * une permission revoquee ou un fabricant qui refuse l'acces GNSS se traduisent par
+ * un message dans [state] plutot que par un plantage.
+ */
 class GnssRepository(context: Context) {
 
     private val appContext = context.applicationContext
     private val locationManager =
-        appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
     private val handler = Handler(Looper.getMainLooper())
 
     private val _state = MutableStateFlow(GnssState())
@@ -75,11 +79,19 @@ class GnssRepository(context: Context) {
     /** Emis a chaque fix : temps GNSS - horloge systeme, en millisecondes. */
     var onGnssTimeOffset: ((Long) -> Unit)? = null
 
+    /** Emis lorsque le fix GNSS devient trop ancien pour servir de reference de temps. */
+    var onGnssTimeLost: (() -> Unit)? = null
+
     private val locationListener = LocationListener { location ->
         if (location.provider == LocationManager.GPS_PROVIDER) {
             computeTimeOffset(location)?.let { onGnssTimeOffset?.invoke(it) }
         }
-        _state.value = _state.value.copy(location = location, hasFix = true)
+        _state.value = _state.value.copy(
+            location = location,
+            hasFix = true,
+            fixAgeSeconds = 0L,
+            issue = null
+        )
     }
 
     private val gnssCallback = object : GnssStatus.Callback() {
@@ -102,29 +114,80 @@ class GnssRepository(context: Context) {
         }
     }
 
+    /** Demarre l'ecoute du recepteur ; sans effet si la localisation est indisponible. */
     @SuppressLint("MissingPermission")
     fun start() {
-        runCatching {
-            locationManager.registerGnssStatusCallback(gnssCallback, handler)
-            locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let {
+        val manager = locationManager
+        if (manager == null) {
+            _state.value = _state.value.copy(listening = false, issue = GnssIssue.NO_SERVICE)
+            return
+        }
+
+        val gpsEnabled = runCatching {
+            manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        }.getOrDefault(false)
+
+        try {
+            manager.registerGnssStatusCallback(gnssCallback, handler)
+            manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let {
                 _state.value = _state.value.copy(location = it)
             }
-            locationManager.requestLocationUpdates(
+            manager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener, Looper.getMainLooper()
             )
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER, 5000L, 0f, locationListener, Looper.getMainLooper()
+            if (manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                manager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER, 5000L, 0f, locationListener,
+                    Looper.getMainLooper()
                 )
             }
+            _state.value = _state.value.copy(
+                listening = true,
+                gpsEnabled = gpsEnabled,
+                issue = if (gpsEnabled) null else GnssIssue.LOCATION_DISABLED
+            )
+        } catch (e: SecurityException) {
+            _state.value = _state.value.copy(listening = false, issue = GnssIssue.PERMISSION_DENIED)
+        } catch (e: IllegalArgumentException) {
+            _state.value =
+                _state.value.copy(listening = false, issue = GnssIssue.RECEIVER_UNAVAILABLE)
         }
     }
 
     fun stop() {
+        val manager = locationManager ?: return
         runCatching {
-            locationManager.removeUpdates(locationListener)
-            locationManager.unregisterGnssStatusCallback(gnssCallback)
+            manager.removeUpdates(locationListener)
+            manager.unregisterGnssStatusCallback(gnssCallback)
         }
+        _state.value = _state.value.copy(listening = false)
+    }
+
+    /**
+     * Reevalue l'age du fix et l'etat du service de localisation. Appele
+     * periodiquement : un fix trop ancien ne peut plus servir de reference de temps.
+     */
+    fun refreshStatus() {
+        val manager = locationManager ?: return
+        val gpsEnabled = runCatching {
+            manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        }.getOrDefault(false)
+
+        val ageSeconds = _state.value.location?.let { fixAgeMillis(it) / 1000L }
+        val stale = ageSeconds != null && ageSeconds > STALE_FIX_SECONDS
+        if (stale || !gpsEnabled) onGnssTimeLost?.invoke()
+
+        _state.value = _state.value.copy(
+            gpsEnabled = gpsEnabled,
+            fixAgeSeconds = ageSeconds,
+            hasFix = _state.value.location != null && !stale,
+            issue = when {
+                !gpsEnabled -> GnssIssue.LOCATION_DISABLED
+                stale -> GnssIssue.SIGNAL_LOST
+                _state.value.location == null && _state.value.listening -> GnssIssue.SEARCHING
+                else -> null
+            }
+        )
     }
 
     /**
@@ -135,12 +198,14 @@ class GnssRepository(context: Context) {
     private fun computeTimeOffset(location: Location): Long? {
         val fixElapsedNanos = location.elapsedRealtimeNanos
         if (fixElapsedNanos <= 0L) return null
-        val nowElapsedMillis = SystemClock.elapsedRealtime()
-        val fixAgeMillis = nowElapsedMillis - fixElapsedNanos / 1_000_000L
-        if (fixAgeMillis > 10_000L) return null
-        val gnssNow = location.time + fixAgeMillis
+        val ageMillis = fixAgeMillis(location)
+        if (ageMillis > FRESH_FIX_MILLIS) return null
+        val gnssNow = location.time + ageMillis
         return gnssNow - System.currentTimeMillis()
     }
+
+    private fun fixAgeMillis(location: Location): Long =
+        SystemClock.elapsedRealtime() - location.elapsedRealtimeNanos / 1_000_000L
 
     private fun constellationName(type: Int): String = when (type) {
         GnssStatus.CONSTELLATION_GPS -> "GPS"
@@ -151,5 +216,13 @@ class GnssRepository(context: Context) {
         GnssStatus.CONSTELLATION_SBAS -> "SBAS"
         GnssStatus.CONSTELLATION_IRNSS -> "NavIC"
         else -> "Inconnu"
+    }
+
+    private companion object {
+        /** Au dela, le fix ne sert plus de reference de temps. */
+        const val FRESH_FIX_MILLIS = 10_000L
+
+        /** Au dela, on considere le signal GPS perdu. */
+        const val STALE_FIX_SECONDS = 30L
     }
 }

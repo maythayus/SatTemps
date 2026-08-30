@@ -50,6 +50,10 @@ object GeoSatellites {
         GeoSatellite("Hispasat 30W (30.0W)", -30.0)
     )
 
+    /**
+     * Azimut, elevation, inclinaison LNB et distance pour viser [satellite] depuis la
+     * position donnee. L'elevation est negative quand le satellite est sous l'horizon.
+     */
     fun pointing(satellite: GeoSatellite, latDeg: Double, lonDeg: Double, altitudeM: Double = 0.0): DishPointing {
         val lat = Math.toRadians(latDeg)
         val lon = Math.toRadians(lonDeg)
@@ -82,6 +86,7 @@ object GeoSatellites {
             .filter { it.visible }
             .maxByOrNull { it.elevationDeg }
 
+    /** Tous les satellites connus, du plus haut au plus bas sur l'horizon. */
     fun all(latDeg: Double, lonDeg: Double, altitudeM: Double = 0.0): List<DishPointing> =
         common.map { pointing(it, latDeg, lonDeg, altitudeM) }
             .sortedByDescending { it.elevationDeg }

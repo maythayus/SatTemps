@@ -1,6 +1,8 @@
 package com.mikael.sattemps
 
 import android.app.Application
+import android.content.Context
+import android.os.PowerManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mikael.sattemps.geo.DishPointing
@@ -22,6 +24,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/**
+ * Rassemble les sources de mesure (GNSS, boussole, modem, temps de reference) et
+ * cadence leur rafraichissement selon l'usage : plein regime quand l'ecran est
+ * visible, ralenti en arriere plan ou en economie de batterie.
+ */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val gnss = GnssRepository(application)
@@ -29,6 +36,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val cells = CellRepository(application, viewModelScope)
     private val timeSync = TimeSyncManager(viewModelScope)
     private val scanner = DirectionScanner()
+    private val powerManager =
+        application.getSystemService(Context.POWER_SERVICE) as? PowerManager
 
     val gnssState: StateFlow<GnssState> = gnss.state
     val compassState: StateFlow<CompassState> = compass.state
@@ -46,39 +55,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val dishPointings: StateFlow<List<DishPointing>> = _dishPointings.asStateFlow()
 
     private var permissionsGranted = false
+    private var foreground = false
 
     init {
         gnss.onGnssTimeOffset = timeSync::onGnssTimeOffset
+        gnss.onGnssTimeLost = timeSync::onGnssTimeLost
 
         viewModelScope.launch {
             while (isActive) {
                 _nowMillis.value = timeSync.state.value.nowMillis()
-                delay(40L)
+                delay(clockIntervalMillis())
             }
         }
 
         viewModelScope.launch {
             while (isActive) {
+                gnss.refreshStatus()
                 val location = gnss.state.value.location
                 if (location != null) {
                     compass.updateDeclination(
-                        location.latitude, location.longitude, location.altitude, System.currentTimeMillis()
+                        location.latitude, location.longitude, location.altitude,
+                        System.currentTimeMillis()
                     )
                     _dishPointings.value =
                         GeoSatellites.all(location.latitude, location.longitude, location.altitude)
                 }
-                delay(5000L)
+                delay(if (foreground) STATUS_INTERVAL_MILLIS else STATUS_IDLE_INTERVAL_MILLIS)
             }
         }
 
         viewModelScope.launch {
             while (isActive) {
-                if (scanner.snapshot().running) {
-                    val dbm = cells.state.value.serving?.dbm
-                    if (dbm != null) scanner.addSample(compass.state.value.trueHeadingDeg, dbm)
+                val running = scanner.snapshot().running
+                if (running) {
+                    cells.state.value.serving?.dbm?.let {
+                        scanner.addSample(compass.state.value.trueHeadingDeg, it)
+                    }
                     _scanState.value = scanner.snapshot()
                 }
-                delay(400L)
+                delay(if (running) SCAN_SAMPLE_INTERVAL_MILLIS else SCAN_IDLE_INTERVAL_MILLIS)
             }
         }
     }
@@ -91,24 +106,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         start()
     }
 
+    /** Ecran visible : capteurs actifs et cadence nominale. */
     fun start() {
+        foreground = true
         compass.start()
     }
 
+    /** Ecran masque : on relache la boussole, principale consommatrice de batterie. */
     fun stop() {
+        foreground = false
         compass.stop()
     }
 
     fun forceTimeSync() = timeSync.forceNtpSync()
 
+    /**
+     * Demarre ou arrete la mesure directionnelle 360°, en accelerant la lecture du
+     * modem pendant la mesure uniquement.
+     */
     fun toggleScan() {
-        if (scanner.snapshot().running) scanner.stop() else scanner.start()
+        if (scanner.snapshot().running) {
+            scanner.stop()
+            cells.refreshIntervalMillis = CellRepository.IDLE_INTERVAL_MILLIS
+        } else {
+            scanner.start()
+            cells.refreshIntervalMillis = CellRepository.SCAN_INTERVAL_MILLIS
+        }
         _scanState.value = scanner.snapshot()
+    }
+
+    /**
+     * Cadence de l'horloge : 40 ms pour une lecture fluide a la milliseconde, ralentie
+     * en arriere plan ou lorsque le telephone est en economie d'energie.
+     */
+    private fun clockIntervalMillis(): Long = when {
+        !foreground -> CLOCK_BACKGROUND_INTERVAL_MILLIS
+        powerManager?.isPowerSaveMode == true -> CLOCK_SAVER_INTERVAL_MILLIS
+        else -> CLOCK_INTERVAL_MILLIS
     }
 
     override fun onCleared() {
         gnss.stop()
         compass.stop()
         super.onCleared()
+    }
+
+    private companion object {
+        const val CLOCK_INTERVAL_MILLIS = 40L
+        const val CLOCK_SAVER_INTERVAL_MILLIS = 200L
+        const val CLOCK_BACKGROUND_INTERVAL_MILLIS = 1000L
+        const val STATUS_INTERVAL_MILLIS = 5000L
+        const val STATUS_IDLE_INTERVAL_MILLIS = 30_000L
+        const val SCAN_SAMPLE_INTERVAL_MILLIS = 400L
+        const val SCAN_IDLE_INTERVAL_MILLIS = 1000L
     }
 }

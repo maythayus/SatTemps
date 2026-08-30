@@ -53,6 +53,26 @@ Installation sur un telephone connecte en USB (debogage USB active) :
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## Tests
+
+Les calculs (visee geostationnaire, analyse du ciel GNSS, encodage NTP, priorite des sources de
+temps, mesure directionnelle 360°, azimuts de l'interface) sont couverts par des tests unitaires
+JVM, sans emulateur :
+
+```bash
+./gradlew test
+./gradlew lint
+```
+
+Les essais terrain (plusieurs telephones, plusieurs regions, modems differents) restent a faire sur
+appareils reels.
+
+## Langues
+
+Tous les textes affiches sont dans `app/src/main/res/values/strings.xml` (francais, langue par
+defaut) et `app/src/main/res/values-en/strings.xml` (anglais). Ajouter une langue revient a copier
+le fichier dans un dossier `values-xx`.
+
 ## Permissions
 
 | Permission | Usage |
