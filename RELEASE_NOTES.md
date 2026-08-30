@@ -1,5 +1,44 @@
 # Notes de version
 
+## v1.1.0 — 30 aout 2026
+
+Version de fiabilite : aucune fonction retiree, mais des erreurs enfin expliquees a l'ecran, des
+textes traduisibles, une consommation reduite et des calculs couverts par des tests.
+
+APK : `dist/SatTemps-v1.1.0-debug.apk` (ou `./gradlew assembleDebug`).
+
+### Ameliorations
+
+**Messages d'erreur et etats**
+- Localisation : service absent, permission refusee (avec acces direct aux reglages en cas de refus
+  definitif), GPS desactive, recherche de fix en cours, signal perdu avec l'age du dernier fix.
+- Reseau mobile : telephonie indisponible, permission refusee, aucune cellule remontee par le modem,
+  echec de lecture.
+- Heure : serveur NTP injoignable ou reponse invalide, indicateur de synchronisation en cours,
+  reessais espaces progressivement hors couverture.
+- Boussole : capteur absent, echec d'enregistrement, besoin de calibrage.
+- Mesure 360° : la couverture du tour est affichee et signalee comme insuffisante sous 70 %.
+
+**Langues**
+- Tous les textes sont dans `res/values/strings.xml` (francais) et `res/values-en/strings.xml`
+  (anglais) ; nombres, dates et heures suivent la langue du telephone.
+
+**Batterie**
+- Horloge a 40 ms ecran allume, 200 ms en economie d'energie, 1 s en arriere plan.
+- Modem interroge chaque seconde pendant la mesure 360°, toutes les 5 s au repos ; calculs GNSS et
+  de visee ralentis hors premier plan.
+
+**Qualite du code**
+- 46 tests unitaires JVM : visee geostationnaire, analyse du ciel GNSS, encodage NTP, priorite des
+  sources de temps et espacement des reessais, mesure directionnelle 360°, conversions d'azimut.
+- Logique de calcul separee des API Android (`SkyAnalysis`, `NtpTimestamp`, `Azimuth`) et KDoc sur
+  les classes principales.
+
+### Limites inchangees
+
+Les limites de la v1.0.0 restent valables. Les essais terrain sur plusieurs telephones, plusieurs
+regions et differents modems restent a faire sur materiel reel.
+
 ## v1.0.0 — 30 aout 2026
 
 Premiere version de **SatTemps** : heure exacte et meilleure orientation d'antenne
