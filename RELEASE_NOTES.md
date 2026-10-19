@@ -1,5 +1,19 @@
 # Notes de version
 
+## v1.1.1 — 19 octobre 2026
+
+Version de maintenance : meme fonctionnement que la v1.1.0, publiee depuis la branche principale.
+
+APK : `dist/SatTemps-v1.1.1-debug.apk` (ou `./gradlew assembleDebug`).
+
+### Corrections
+
+- Le numero de version affiche par Android est maintenant `1.1.1` (code de version 3) ; les APK
+  precedents annoncaient encore `1.0`.
+- Les ameliorations de la v1.1.0 (messages d'erreur, francais/anglais, cadences adaptees a la
+  batterie, tests) sont integrees a la branche principale.
+- 54 tests unitaires, `lint` et compilation verifies sur la branche principale.
+
 ## v1.1.0 — 30 aout 2026
 
 Version de fiabilite : aucune fonction retiree, mais des erreurs enfin expliquees a l'ecran, des
