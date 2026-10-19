@@ -14,8 +14,9 @@ object SntpClient {
     private const val NTP_PORT = 123
     private const val NTP_PACKET_SIZE = 48
     private const val NTP_MODE_CLIENT = 3
+    private const val NTP_MODE_SERVER = 4
     private const val NTP_VERSION = 3
-    private const val OFFSET_1900_TO_1970 = 2208988800L
+    private const val MAX_STRATUM = 15
 
     data class Result(
         /** Decalage a ajouter a System.currentTimeMillis() pour obtenir le temps NTP. */
@@ -26,7 +27,25 @@ object SntpClient {
         val elapsedRealtimeAtSync: Long
     )
 
-    fun request(host: String, timeoutMillis: Int = 4000): Result? {
+    /** Nature de l'echec, traduite dans l'interface. */
+    enum class FailureReason { UNREACHABLE, INVALID_RESPONSE }
+
+    /** Resultat d'une interrogation : mesure exploitable ou motif d'echec. */
+    sealed interface Outcome {
+        data class Success(val result: Result) : Outcome
+        data class Failure(
+            val server: String,
+            val reason: FailureReason,
+            /** Detail technique (message d'exception), utile au diagnostic. */
+            val detail: String? = null
+        ) : Outcome
+    }
+
+    /**
+     * Interroge [host] en conservant le motif d'echec, afin de pouvoir l'afficher a
+     * l'utilisateur (serveur injoignable, reponse invalide).
+     */
+    fun query(host: String, timeoutMillis: Int = DEFAULT_TIMEOUT_MILLIS): Outcome {
         var socket: DatagramSocket? = null
         return try {
             val address = InetAddress.getByName(host)
@@ -36,60 +55,63 @@ object SntpClient {
 
             val requestTime = System.currentTimeMillis()
             val requestTicks = SystemClock.elapsedRealtime()
-            writeTimestamp(buffer, 40, requestTime)
+            NtpTimestamp.write(buffer, TRANSMIT_OFFSET, requestTime)
 
             socket.send(DatagramPacket(buffer, buffer.size, address, NTP_PORT))
-            val response = DatagramPacket(buffer, buffer.size)
-            socket.receive(response)
+            socket.receive(DatagramPacket(buffer, buffer.size))
 
-            val responseTicks = SystemClock.elapsedRealtime()
-            val responseTime = requestTime + (responseTicks - requestTicks)
+            evaluate(buffer, host, requestTime, requestTicks, SystemClock.elapsedRealtime())
+        } catch (e: Exception) {
+            Outcome.Failure(
+                server = host,
+                reason = FailureReason.UNREACHABLE,
+                detail = e.message ?: e.javaClass.simpleName
+            )
+        } finally {
+            socket?.close()
+        }
+    }
 
-            val originateTime = readTimestamp(buffer, 24)
-            val receiveTime = readTimestamp(buffer, 32)
-            val transmitTime = readTimestamp(buffer, 40)
+    /**
+     * Valide la reponse NTP et en deduit le decalage d'horloge.
+     *
+     * Les temps monotones sont fournis par l'appelant, ce qui rend le calcul
+     * independant d'Android et donc testable : [requestTicks] et [responseTicks]
+     * encadrent l'echange reseau, [requestTime] est l'heure systeme au depart.
+     */
+    internal fun evaluate(
+        buffer: ByteArray,
+        host: String,
+        requestTime: Long,
+        requestTicks: Long,
+        responseTicks: Long
+    ): Outcome {
+        val mode = buffer[0].toInt() and 0x7
+        val stratum = buffer[1].toInt() and 0xFF
+        val originateTime = NtpTimestamp.read(buffer, ORIGINATE_OFFSET)
+        val receiveTime = NtpTimestamp.read(buffer, RECEIVE_OFFSET)
+        val transmitTime = NtpTimestamp.read(buffer, TRANSMIT_OFFSET)
 
-            val roundTrip = (responseTicks - requestTicks) - (transmitTime - receiveTime)
-            val offset = ((receiveTime - originateTime) + (transmitTime - responseTime)) / 2
+        if (mode != NTP_MODE_SERVER || stratum == 0 || stratum > MAX_STRATUM || transmitTime <= 0L) {
+            return Outcome.Failure(server = host, reason = FailureReason.INVALID_RESPONSE)
+        }
 
+        val responseTime = requestTime + (responseTicks - requestTicks)
+        val roundTrip = (responseTicks - requestTicks) - (transmitTime - receiveTime)
+        val offset = ((receiveTime - originateTime) + (transmitTime - responseTime)) / 2
+
+        return Outcome.Success(
             Result(
                 offsetMillis = offset,
                 roundTripMillis = roundTrip.coerceAtLeast(0),
                 server = host,
                 elapsedRealtimeAtSync = responseTicks
             )
-        } catch (e: Exception) {
-            null
-        } finally {
-            socket?.close()
-        }
+        )
     }
 
-    private fun readTimestamp(buffer: ByteArray, offset: Int): Long {
-        val seconds = readUnsigned32(buffer, offset)
-        val fraction = readUnsigned32(buffer, offset + 4)
-        return (seconds - OFFSET_1900_TO_1970) * 1000L + (fraction * 1000L) / 0x100000000L
-    }
-
-    private fun writeTimestamp(buffer: ByteArray, offset: Int, time: Long) {
-        var seconds = time / 1000L + OFFSET_1900_TO_1970
-        val milliseconds = time % 1000L
-        for (i in 3 downTo 0) {
-            buffer[offset + i] = (seconds and 0xFF).toByte()
-            seconds = seconds shr 8
-        }
-        var fraction = milliseconds * 0x100000000L / 1000L
-        for (i in 3 downTo 0) {
-            buffer[offset + 4 + i] = (fraction and 0xFF).toByte()
-            fraction = fraction shr 8
-        }
-    }
-
-    private fun readUnsigned32(buffer: ByteArray, offset: Int): Long {
-        var value = 0L
-        for (i in 0 until 4) {
-            value = (value shl 8) or (buffer[offset + i].toLong() and 0xFF)
-        }
-        return value
-    }
+    internal const val DEFAULT_TIMEOUT_MILLIS = 4000
+    internal const val ORIGINATE_OFFSET = 24
+    internal const val RECEIVE_OFFSET = 32
+    internal const val TRANSMIT_OFFSET = 40
 }

@@ -7,9 +7,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Origine du temps affiche, du plus precis au moins precis. */
 enum class TimeSource { SYSTEME, NTP, GNSS }
 
 data class TimeSyncState(
@@ -22,7 +24,11 @@ data class TimeSyncState(
     val ntpRoundTripMillis: Long? = null,
     val ntpServer: String? = null,
     val gnssOffsetMillis: Long? = null,
-    val lastSyncElapsedRealtime: Long? = null
+    val lastSyncElapsedRealtime: Long? = null,
+    /** Synchronisation NTP en cours : permet d'afficher un etat de chargement. */
+    val syncing: Boolean = false,
+    /** Dernier echec de synchronisation NTP, `null` si tout va bien. */
+    val ntpFailure: SntpClient.Outcome.Failure? = null
 ) {
     /** Instant de reference courant, en millisecondes UTC. */
     fun nowMillis(): Long = System.currentTimeMillis() + offsetMillis
@@ -32,8 +38,50 @@ data class TimeSyncState(
 }
 
 /**
+ * Choisit la meilleure source de temps disponible et l'incertitude associee.
+ *
+ * Fonction pure, sans dependance Android, afin d'etre couverte par des tests unitaires.
+ */
+internal fun resolveTimeSource(state: TimeSyncState): TimeSyncState = when {
+    state.gnssOffsetMillis != null -> state.copy(
+        source = TimeSource.GNSS,
+        offsetMillis = state.gnssOffsetMillis,
+        uncertaintyMillis = GNSS_UNCERTAINTY_MILLIS
+    )
+
+    state.ntpOffsetMillis != null -> state.copy(
+        source = TimeSource.NTP,
+        offsetMillis = state.ntpOffsetMillis,
+        uncertaintyMillis = ((state.ntpRoundTripMillis ?: 0L) / 2).coerceAtLeast(1L)
+    )
+
+    else -> state.copy(
+        source = TimeSource.SYSTEME,
+        offsetMillis = 0L,
+        uncertaintyMillis = SYSTEM_UNCERTAINTY_MILLIS
+    )
+}
+
+private const val GNSS_UNCERTAINTY_MILLIS = 50L
+private const val SYSTEM_UNCERTAINTY_MILLIS = 1000L
+
+/** 5 min si tout va bien, puis 15 s doublees a chaque echec consecutif. */
+internal fun retryDelayMillis(consecutiveFailures: Int): Long =
+    if (consecutiveFailures <= 0) {
+        BASE_INTERVAL_MILLIS
+    } else {
+        15_000L shl (consecutiveFailures - 1)
+    }
+
+private const val BASE_INTERVAL_MILLIS = 5 * 60 * 1000L
+internal const val MAX_BACKOFF_STEPS = 4
+
+/**
  * Fournit un temps de reference precis : le temps GNSS (issu du fix satellite) est
  * prioritaire, sinon un serveur NTP, sinon l'horloge du telephone.
+ *
+ * En cas d'echec reseau, les tentatives sont espacees progressivement pour ne pas
+ * vider la batterie hors couverture.
  */
 class TimeSyncManager(private val scope: CoroutineScope) {
 
@@ -44,16 +92,18 @@ class TimeSyncManager(private val scope: CoroutineScope) {
 
     init {
         scope.launch {
-            while (true) {
-                syncNtp()
-                delay(5 * 60 * 1000L)
+            var failures = 0
+            while (isActive) {
+                val ok = syncNtp()
+                failures = if (ok) 0 else (failures + 1).coerceAtMost(MAX_BACKOFF_STEPS)
+                delay(retryDelayMillis(failures))
             }
         }
     }
 
     /** Decalage mesure a partir d'un fix GNSS (temps satellite - horloge systeme). */
     fun onGnssTimeOffset(offsetMillis: Long) {
-        _state.value = recompute(
+        _state.value = resolveTimeSource(
             _state.value.copy(
                 gnssOffsetMillis = offsetMillis,
                 lastSyncElapsedRealtime = SystemClock.elapsedRealtime()
@@ -61,37 +111,50 @@ class TimeSyncManager(private val scope: CoroutineScope) {
         )
     }
 
+    /** Le fix GNSS est perdu ou trop ancien : on retombe sur NTP ou l'horloge systeme. */
+    fun onGnssTimeLost() {
+        if (_state.value.gnssOffsetMillis == null) return
+        _state.value = resolveTimeSource(_state.value.copy(gnssOffsetMillis = null))
+    }
+
     fun forceNtpSync() {
         scope.launch { syncNtp() }
     }
 
-    private suspend fun syncNtp() {
-        val result = withContext(Dispatchers.IO) {
-            servers.firstNotNullOfOrNull { SntpClient.request(it) }
-        } ?: return
-        _state.value = recompute(
-            _state.value.copy(
-                ntpOffsetMillis = result.offsetMillis,
-                ntpRoundTripMillis = result.roundTripMillis,
-                ntpServer = result.server,
-                lastSyncElapsedRealtime = result.elapsedRealtimeAtSync
+    /** Interroge les serveurs NTP tour a tour ; retourne `true` des qu'une reponse est valide. */
+    private suspend fun syncNtp(): Boolean {
+        if (_state.value.syncing) return false
+        _state.value = _state.value.copy(syncing = true)
+        val outcomes = withContext(Dispatchers.IO) {
+            val results = mutableListOf<SntpClient.Outcome>()
+            for (server in servers) {
+                val outcome = SntpClient.query(server)
+                results += outcome
+                if (outcome is SntpClient.Outcome.Success) break
+            }
+            results
+        }
+        val success = outcomes.filterIsInstance<SntpClient.Outcome.Success>().firstOrNull()
+
+        _state.value = if (success != null) {
+            val result = success.result
+            resolveTimeSource(
+                _state.value.copy(
+                    ntpOffsetMillis = result.offsetMillis,
+                    ntpRoundTripMillis = result.roundTripMillis,
+                    ntpServer = result.server,
+                    lastSyncElapsedRealtime = result.elapsedRealtimeAtSync,
+                    syncing = false,
+                    ntpFailure = null
+                )
             )
-        )
+        } else {
+            _state.value.copy(
+                syncing = false,
+                ntpFailure = outcomes.filterIsInstance<SntpClient.Outcome.Failure>().lastOrNull()
+            )
+        }
+        return success != null
     }
 
-    private fun recompute(state: TimeSyncState): TimeSyncState = when {
-        state.gnssOffsetMillis != null -> state.copy(
-            source = TimeSource.GNSS,
-            offsetMillis = state.gnssOffsetMillis,
-            uncertaintyMillis = 50L
-        )
-
-        state.ntpOffsetMillis != null -> state.copy(
-            source = TimeSource.NTP,
-            offsetMillis = state.ntpOffsetMillis,
-            uncertaintyMillis = ((state.ntpRoundTripMillis ?: 0L) / 2).coerceAtLeast(1L)
-        )
-
-        else -> state.copy(source = TimeSource.SYSTEME, offsetMillis = 0L, uncertaintyMillis = 1000L)
-    }
 }

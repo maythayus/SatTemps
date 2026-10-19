@@ -13,7 +13,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.unit.dp
+import com.mikael.sattemps.R
 import com.mikael.sattemps.gnss.Satellite
 import kotlin.math.cos
 import kotlin.math.sin
@@ -21,6 +23,10 @@ import kotlin.math.sin
 /**
  * Vue du ciel : projection polaire des satellites GNSS (zenith au centre, horizon au
  * bord), orientee selon le cap du telephone, avec une aiguille vers la direction cible.
+ *
+ * @param headingDeg cap du telephone par rapport au nord vrai.
+ * @param targetAzimuthDeg direction a viser, `null` si aucune cible connue.
+ * @param targetLabel etiquette dessinee au bout de l'aiguille.
  */
 @Composable
 fun SkyView(
@@ -30,6 +36,9 @@ fun SkyView(
     targetLabel: String?,
     modifier: Modifier = Modifier
 ) {
+    val cardinals = stringArrayResource(R.array.cardinal_points)
+    val quadrants = listOf(cardinals[0], cardinals[4], cardinals[8], cardinals[12])
+
     Box(modifier.fillMaxWidth().aspectRatio(1f)) {
         Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
             val center = Offset(size.width / 2f, size.height / 2f)
@@ -46,7 +55,7 @@ fun SkyView(
 
             // Le ciel tourne a l'inverse du telephone pour rester cale sur le nord vrai.
             rotate(degrees = -headingDeg, pivot = center) {
-                drawCardinals(center, radius)
+                drawCardinals(center, radius, quadrants)
 
                 satellites.forEach { satellite ->
                     if (satellite.elevationDeg < 0f) return@forEach
@@ -86,15 +95,15 @@ fun SkyView(
     }
 }
 
-private fun DrawScope.drawCardinals(center: Offset, radius: Float) {
+private fun DrawScope.drawCardinals(center: Offset, radius: Float, labels: List<String>) {
     val paint = android.graphics.Paint().apply {
         color = android.graphics.Color.WHITE
         textSize = 34f
         textAlign = android.graphics.Paint.Align.CENTER
         isAntiAlias = true
     }
-    listOf("N" to 0.0, "E" to 90.0, "S" to 180.0, "O" to 270.0).forEach { (label, azimuth) ->
-        val rad = Math.toRadians(azimuth)
+    labels.forEachIndexed { index, label ->
+        val rad = Math.toRadians(index * 90.0)
         val x = center.x + ((radius + 30f) * sin(rad)).toFloat()
         val y = center.y - ((radius + 30f) * cos(rad)).toFloat() + 12f
         drawContext.canvas.nativeCanvas.drawText(label, x, y, paint)

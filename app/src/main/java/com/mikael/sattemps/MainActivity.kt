@@ -1,8 +1,11 @@
 package com.mikael.sattemps
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,6 +22,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -31,6 +36,11 @@ private val REQUIRED_PERMISSIONS = arrayOf(
     Manifest.permission.READ_PHONE_STATE
 )
 
+/**
+ * Ecran unique de l'application : demande les permissions necessaires puis affiche
+ * [MainScreen]. Tant que la localisation precise est refusee, seule l'explication
+ * est visible car aucune mesure n'est possible.
+ */
 class MainActivity : ComponentActivity() {
 
     private var viewModel: MainViewModel? = null
@@ -42,9 +52,12 @@ class MainActivity : ComponentActivity() {
             viewModel?.onPermissionsGranted()
         }
         granted = hasLocationPermission()
+        permanentlyDenied = !granted &&
+            !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
     }
 
     private var granted by mutableStateOf(false)
+    private var permanentlyDenied by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,7 +72,11 @@ class MainActivity : ComponentActivity() {
                         model.onPermissionsGranted()
                         MainScreen(model)
                     } else {
-                        PermissionRequest { permissionLauncher.launch(REQUIRED_PERMISSIONS) }
+                        PermissionRequest(
+                            permanentlyDenied = permanentlyDenied,
+                            onRequest = { permissionLauncher.launch(REQUIRED_PERMISSIONS) },
+                            onOpenSettings = ::openAppSettings
+                        )
                     }
                 }
             }
@@ -78,22 +95,39 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    private fun openAppSettings() {
+        startActivity(
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.fromParts("package", packageName, null)
+            )
+        )
+    }
+
     private fun hasLocationPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
 }
 
 @androidx.compose.runtime.Composable
-private fun PermissionRequest(onRequest: () -> Unit) {
+private fun PermissionRequest(
+    permanentlyDenied: Boolean,
+    onRequest: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            "SatTemps a besoin de la localisation precise (GPS) et de l'etat du telephone " +
-                "pour lire les satellites, l'heure GNSS et les cellules 5G / LTE."
-        )
-        Button(onClick = onRequest) { Text("Autoriser") }
+        Text(stringResource(R.string.permission_rationale), textAlign = TextAlign.Center)
+        if (permanentlyDenied) {
+            Text(stringResource(R.string.permission_denied_twice), textAlign = TextAlign.Center)
+            Button(onClick = onOpenSettings) {
+                Text(stringResource(R.string.permission_open_settings))
+            }
+        } else {
+            Button(onClick = onRequest) { Text(stringResource(R.string.permission_allow)) }
+        }
     }
 }

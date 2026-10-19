@@ -1,4 +1,142 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">SatTemps</string>
+    <string name="app_name" translatable="false">SatTemps</string>
+    <string name="app_title">SatTemps — heure et orientation</string>
+
+    <string name="tab_time">Heure</string>
+    <string name="tab_sky">Ciel GPS</string>
+    <string name="tab_dish">Parabole</string>
+    <string name="tab_network">Reseau</string>
+
+    <string name="permission_rationale">SatTemps a besoin de la localisation precise (GPS) et de l\'etat du telephone pour lire les satellites, l\'heure GNSS et les cellules 5G / LTE.</string>
+    <string name="permission_allow">Autoriser</string>
+    <string name="permission_open_settings">Ouvrir les reglages</string>
+    <string name="permission_denied_twice">Permission refusee : autorisez la localisation precise dans les reglages de l\'application.</string>
+
+    <string name="section_exact_time">Heure exacte</string>
+    <string name="section_gps_position">Position GPS</string>
+    <string name="section_best_gps_orientation">Meilleure orientation GPS</string>
+    <string name="section_satellites">Satellites recus (%1$d)</string>
+    <string name="section_dish_best">Meilleure visee geostationnaire</string>
+    <string name="section_dish_all">Tous les satellites</string>
+    <string name="section_dish">Parabole satellite</string>
+    <string name="section_mobile">Reseau mobile</string>
+    <string name="section_antenna_direction">Orientation de l\'antenne relais</string>
+    <string name="section_sector_signal">Signal par secteur</string>
+
+    <string name="label_utc">UTC</string>
+    <string name="label_timezone">Fuseau</string>
+    <string name="label_source">Source</string>
+    <string name="label_clock_offset">Ecart horloge du telephone</string>
+    <string name="label_uncertainty">Incertitude</string>
+    <string name="label_ntp_server">Serveur NTP</string>
+    <string name="label_gps_offset">Ecart mesure par GPS</string>
+    <string name="label_last_sync">Derniere synchro</string>
+    <string name="action_resync">Resynchroniser maintenant</string>
+    <string name="action_syncing">Synchronisation…</string>
+
+    <string name="label_latitude">Latitude</string>
+    <string name="label_longitude">Longitude</string>
+    <string name="label_altitude">Altitude</string>
+    <string name="label_accuracy">Precision</string>
+    <string name="label_satellites_used">Satellites utilises</string>
+    <string name="label_fix_age">Age du fix</string>
+
+    <string name="label_phone_heading">Cap du telephone</string>
+    <string name="label_best_sky">Meilleure direction (ciel degage)</string>
+    <string name="label_turn">Rotation a effectuer</string>
+    <string name="label_best_satellite">Meilleur satellite</string>
+    <string name="label_declination">Declinaison magnetique</string>
+
+    <string name="label_satellite">Satellite</string>
+    <string name="label_azimuth_true">Azimut (nord vrai)</string>
+    <string name="label_elevation">Elevation</string>
+    <string name="label_lnb_skew">Inclinaison LNB</string>
+    <string name="label_distance">Distance</string>
+
+    <string name="label_operator">Operateur</string>
+    <string name="label_technology">Technologie</string>
+    <string name="label_5g">5G NR</string>
+    <string name="label_serving_cell">Cellule servante</string>
+    <string name="label_power">Puissance</string>
+    <string name="label_quality_rsrq">Qualite (RSRQ)</string>
+    <string name="label_quality">Qualite</string>
+    <string name="label_sinr">SINR</string>
+    <string name="label_bands">Bandes</string>
+    <string name="label_identity">Identite</string>
+    <string name="label_current_heading">Cap actuel</string>
+    <string name="label_scan_coverage">Couverture de la mesure</string>
+    <string name="label_sector_signal">Signal dans ce secteur</string>
+
+    <string name="value_connected">connectee</string>
+    <string name="value_not_connected">non connectee</string>
+    <string name="value_dash" translatable="false">-</string>
+    <string name="value_millis" translatable="false">%1$d ms</string>
+    <string name="value_uncertainty" translatable="false">± %1$d ms</string>
+    <string name="value_ntp_server">%1$s (aller-retour %2$d ms)</string>
+    <string name="value_seconds_ago">il y a %1$d s</string>
+    <string name="value_seconds" translatable="false">%1$d s</string>
+    <string name="value_dbm" translatable="false">%1$d dBm</string>
+    <string name="value_db" translatable="false">%1$d dB</string>
+    <string name="value_azimuth" translatable="false">%1$s (%2$s)</string>
+    <string name="value_satellite_ratio" translatable="false">%1$d / %2$d</string>
+    <string name="value_best_satellite" translatable="false">%1$s #%2$d · %3$d dB-Hz · az %4$d° el %5$d°</string>
+    <string name="value_satellite_row">az %1$d° · el %2$d° · %3$d dB-Hz</string>
+    <string name="value_dish_row" translatable="false">az %1$s · el %2$s · LNB %3$s</string>
+    <string name="value_sector_mean">%1$s dBm (max %2$d dBm)</string>
+    <string name="value_sector_samples">%1$s dBm · %2$d mesures</string>
+    <string name="value_aligned">aligne</string>
+    <string name="value_turn_right">%1$d° vers la droite</string>
+    <string name="value_turn_left">%1$d° vers la gauche</string>
+    <string name="value_below_horizon">sous l\'horizon</string>
+    <string name="value_used_in_fix" translatable="false">✓</string>
+
+    <string name="cell_serving">%1$s (servante)</string>
+    <string name="cell_neighbour">%1$s (voisine)</string>
+
+    <string name="action_start_scan">Demarrer la mesure 360°</string>
+    <string name="action_stop_scan">Arreter la mesure</string>
+    <string name="scan_help">Lancez la mesure puis tournez lentement sur vous meme (360°) en gardant le telephone devant vous : l\'application retient la direction ou le signal est le plus fort.</string>
+    <string name="scan_need_coverage">Continuez a tourner : la direction se stabilise au dela de %1$d %% de couverture.</string>
+
+    <string name="gnss_no_service">Ce telephone n\'expose pas de service de localisation.</string>
+    <string name="gnss_permission_denied">Permission de localisation precise refusee.</string>
+    <string name="gnss_receiver_unavailable">Recepteur GPS indisponible sur cet appareil.</string>
+    <string name="gnss_location_disabled">Localisation desactivee dans les reglages du telephone.</string>
+    <string name="gnss_searching">Recherche de la position : placez-vous a ciel ouvert.</string>
+    <string name="gnss_signal_lost">Signal GPS perdu : derniere position il y a %1$d s.</string>
+    <string name="gnss_no_satellite">Aucun satellite recu pour le moment.</string>
+    <string name="gnss_waiting_receiver">En attente du recepteur GNSS…</string>
+
+    <string name="mobile_no_telephony">Ce telephone n\'expose pas d\'informations radio.</string>
+    <string name="mobile_permission_denied">Permissions telephonie et localisation requises.</string>
+    <string name="mobile_no_cell_info">Aucune cellule remontee par le modem (certains constructeurs les masquent).</string>
+    <string name="mobile_read_failed">Lecture radio impossible : %1$s</string>
+
+    <string name="compass_unavailable">Aucun capteur de rotation : l\'orientation n\'est pas disponible.</string>
+    <string name="compass_calibration">Boussole a etalonner : decrivez un 8 avec le telephone.</string>
+
+    <string name="ntp_error">Synchronisation NTP indisponible : %1$s</string>
+    <string name="ntp_unreachable">%1$s injoignable</string>
+    <string name="ntp_invalid_response">reponse invalide de %1$s</string>
+    <string name="dish_needs_position">Position GPS requise pour calculer la visee.</string>
+    <string name="dish_none_visible">Aucun satellite geostationnaire visible depuis cette position.</string>
+
+    <string-array name="cardinal_points">
+        <item>N</item>
+        <item>NNE</item>
+        <item>NE</item>
+        <item>ENE</item>
+        <item>E</item>
+        <item>ESE</item>
+        <item>SE</item>
+        <item>SSE</item>
+        <item>S</item>
+        <item>SSO</item>
+        <item>SO</item>
+        <item>OSO</item>
+        <item>O</item>
+        <item>ONO</item>
+        <item>NO</item>
+        <item>NNO</item>
+    </string-array>
 </resources>

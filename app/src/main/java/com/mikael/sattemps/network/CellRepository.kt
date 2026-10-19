@@ -31,12 +31,22 @@ data class CellReading(
     val bands: String?
 )
 
+/** Cause d'indisponibilite des informations radio, traduite dans l'interface. */
+enum class MobileIssue {
+    NO_TELEPHONY,
+    PERMISSION_DENIED,
+    NO_CELL_INFO,
+    READ_FAILED
+}
+
 data class MobileState(
     val operator: String = "",
     val networkType: String = "",
     val nrConnected: Boolean = false,
     val cells: List<CellReading> = emptyList(),
-    val error: String? = null
+    val issue: MobileIssue? = null,
+    /** Detail technique du dernier echec, utile au diagnostic. */
+    val errorDetail: String? = null
 ) {
     val serving: CellReading? get() = cells.firstOrNull { it.registered } ?: cells.firstOrNull()
 }
@@ -49,35 +59,54 @@ class CellRepository(context: Context, private val scope: CoroutineScope) {
 
     private val appContext = context.applicationContext
     private val telephony =
-        appContext.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        appContext.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
 
     private val _state = MutableStateFlow(MobileState())
     val state: StateFlow<MobileState> = _state.asStateFlow()
 
+    /**
+     * Periode de lecture demandee : courte pendant la mesure directionnelle, longue
+     * en veille pour epargner la batterie.
+     */
+    @Volatile
+    var refreshIntervalMillis: Long = IDLE_INTERVAL_MILLIS
+
+    private var started = false
+
     fun start() {
+        if (started) return
+        started = true
         scope.launch {
             while (isActive) {
                 refresh()
-                delay(2000L)
+                delay(refreshIntervalMillis)
             }
         }
     }
 
     @SuppressLint("MissingPermission")
     fun refresh() {
+        val manager = telephony
+        if (manager == null) {
+            _state.value = _state.value.copy(issue = MobileIssue.NO_TELEPHONY)
+            return
+        }
         try {
-            val cells = telephony.allCellInfo.orEmpty().mapNotNull { toReading(it) }
+            val cells = manager.allCellInfo.orEmpty().mapNotNull { toReading(it) }
             _state.value = MobileState(
-                operator = telephony.networkOperatorName.orEmpty(),
+                operator = manager.networkOperatorName.orEmpty(),
                 networkType = networkTypeName(),
                 nrConnected = cells.any { it.technology.startsWith("5G") && it.registered },
                 cells = cells.sortedByDescending { it.registered },
-                error = null
+                issue = if (cells.isEmpty()) MobileIssue.NO_CELL_INFO else null
             )
         } catch (e: SecurityException) {
-            _state.value = _state.value.copy(error = "Permissions telephonie / localisation requises")
+            _state.value = _state.value.copy(issue = MobileIssue.PERMISSION_DENIED)
         } catch (e: Exception) {
-            _state.value = _state.value.copy(error = e.message)
+            _state.value = _state.value.copy(
+                issue = MobileIssue.READ_FAILED,
+                errorDetail = e.message ?: e.javaClass.simpleName
+            )
         }
     }
 
@@ -143,7 +172,7 @@ class CellRepository(context: Context, private val scope: CoroutineScope) {
 
     @SuppressLint("MissingPermission")
     private fun networkTypeName(): String = try {
-        when (telephony.dataNetworkType) {
+        when (telephony?.dataNetworkType) {
             TelephonyManager.NETWORK_TYPE_NR -> "5G NR"
             TelephonyManager.NETWORK_TYPE_LTE -> "LTE"
             TelephonyManager.NETWORK_TYPE_HSPAP -> "HSPA+"
@@ -155,5 +184,13 @@ class CellRepository(context: Context, private val scope: CoroutineScope) {
         }
     } catch (e: SecurityException) {
         "Inconnu"
+    }
+
+    companion object {
+        /** Lecture rapide pendant la mesure 360°. */
+        const val SCAN_INTERVAL_MILLIS = 1000L
+
+        /** Lecture ralentie hors mesure. */
+        const val IDLE_INTERVAL_MILLIS = 5000L
     }
 }

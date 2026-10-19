@@ -1,0 +1,130 @@
+<resources>
+    <string name="app_title">SatTemps — time and orientation</string>
+
+    <string name="tab_time">Time</string>
+    <string name="tab_sky">GPS sky</string>
+    <string name="tab_dish">Dish</string>
+    <string name="tab_network">Network</string>
+
+    <string name="permission_rationale">SatTemps needs precise location (GPS) and phone state to read satellites, GNSS time and 5G / LTE cells.</string>
+    <string name="permission_allow">Allow</string>
+    <string name="permission_open_settings">Open settings</string>
+    <string name="permission_denied_twice">Permission denied: allow precise location in the app settings.</string>
+
+    <string name="section_exact_time">Exact time</string>
+    <string name="section_gps_position">GPS position</string>
+    <string name="section_best_gps_orientation">Best GPS orientation</string>
+    <string name="section_satellites">Received satellites (%1$d)</string>
+    <string name="section_dish_best">Best geostationary aim</string>
+    <string name="section_dish_all">All satellites</string>
+    <string name="section_dish">Satellite dish</string>
+    <string name="section_mobile">Mobile network</string>
+    <string name="section_antenna_direction">Cell tower direction</string>
+    <string name="section_sector_signal">Signal per sector</string>
+
+    <string name="label_utc">UTC</string>
+    <string name="label_timezone">Time zone</string>
+    <string name="label_source">Source</string>
+    <string name="label_clock_offset">Phone clock offset</string>
+    <string name="label_uncertainty">Uncertainty</string>
+    <string name="label_ntp_server">NTP server</string>
+    <string name="label_gps_offset">Offset measured by GPS</string>
+    <string name="label_last_sync">Last sync</string>
+    <string name="action_resync">Resync now</string>
+    <string name="action_syncing">Syncing…</string>
+
+    <string name="label_latitude">Latitude</string>
+    <string name="label_longitude">Longitude</string>
+    <string name="label_altitude">Altitude</string>
+    <string name="label_accuracy">Accuracy</string>
+    <string name="label_satellites_used">Satellites used</string>
+    <string name="label_fix_age">Fix age</string>
+
+    <string name="label_phone_heading">Phone heading</string>
+    <string name="label_best_sky">Best direction (clear sky)</string>
+    <string name="label_turn">Turn</string>
+    <string name="label_best_satellite">Best satellite</string>
+    <string name="label_declination">Magnetic declination</string>
+
+    <string name="label_satellite">Satellite</string>
+    <string name="label_azimuth_true">Azimuth (true north)</string>
+    <string name="label_elevation">Elevation</string>
+    <string name="label_lnb_skew">LNB skew</string>
+    <string name="label_distance">Distance</string>
+
+    <string name="label_operator">Operator</string>
+    <string name="label_technology">Technology</string>
+    <string name="label_5g">5G NR</string>
+    <string name="label_serving_cell">Serving cell</string>
+    <string name="label_power">Power</string>
+    <string name="label_quality_rsrq">Quality (RSRQ)</string>
+    <string name="label_quality">Quality</string>
+    <string name="label_sinr">SINR</string>
+    <string name="label_bands">Bands</string>
+    <string name="label_identity">Identity</string>
+    <string name="label_current_heading">Current heading</string>
+    <string name="label_scan_coverage">Scan coverage</string>
+    <string name="label_sector_signal">Signal in this sector</string>
+
+    <string name="value_connected">connected</string>
+    <string name="value_not_connected">not connected</string>
+    <string name="value_seconds_ago">%1$d s ago</string>
+    <string name="value_ntp_server">%1$s (round trip %2$d ms)</string>
+    <string name="value_satellite_row">az %1$d° · el %2$d° · %3$d dB-Hz</string>
+    <string name="value_sector_mean">%1$s dBm (max %2$d dBm)</string>
+    <string name="value_sector_samples">%1$s dBm · %2$d samples</string>
+    <string name="value_aligned">aligned</string>
+    <string name="value_turn_right">%1$d° to the right</string>
+    <string name="value_turn_left">%1$d° to the left</string>
+    <string name="value_below_horizon">below horizon</string>
+
+    <string name="cell_serving">%1$s (serving)</string>
+    <string name="cell_neighbour">%1$s (neighbour)</string>
+
+    <string name="action_start_scan">Start 360° scan</string>
+    <string name="action_stop_scan">Stop scan</string>
+    <string name="scan_help">Start the scan then turn slowly through 360° holding the phone in front of you: the app keeps the direction where the signal is strongest.</string>
+    <string name="scan_need_coverage">Keep turning: the direction settles beyond %1$d %% coverage.</string>
+
+    <string name="gnss_no_service">This phone exposes no location service.</string>
+    <string name="gnss_permission_denied">Precise location permission denied.</string>
+    <string name="gnss_receiver_unavailable">GPS receiver unavailable on this device.</string>
+    <string name="gnss_location_disabled">Location turned off in the phone settings.</string>
+    <string name="gnss_searching">Searching for position: move to an open sky area.</string>
+    <string name="gnss_signal_lost">GPS signal lost: last position %1$d s ago.</string>
+    <string name="gnss_no_satellite">No satellite received yet.</string>
+    <string name="gnss_waiting_receiver">Waiting for the GNSS receiver…</string>
+
+    <string name="mobile_no_telephony">This phone exposes no radio information.</string>
+    <string name="mobile_permission_denied">Telephony and location permissions required.</string>
+    <string name="mobile_no_cell_info">No cell reported by the modem (some vendors hide them).</string>
+    <string name="mobile_read_failed">Radio read failed: %1$s</string>
+
+    <string name="compass_unavailable">No rotation sensor: orientation is unavailable.</string>
+    <string name="compass_calibration">Compass needs calibration: move the phone in a figure eight.</string>
+
+    <string name="ntp_error">NTP sync unavailable: %1$s</string>
+    <string name="ntp_unreachable">%1$s unreachable</string>
+    <string name="ntp_invalid_response">invalid response from %1$s</string>
+    <string name="dish_needs_position">GPS position required to compute the aim.</string>
+    <string name="dish_none_visible">No geostationary satellite visible from this position.</string>
+
+    <string-array name="cardinal_points">
+        <item>N</item>
+        <item>NNE</item>
+        <item>NE</item>
+        <item>ENE</item>
+        <item>E</item>
+        <item>ESE</item>
+        <item>SE</item>
+        <item>SSE</item>
+        <item>S</item>
+        <item>SSW</item>
+        <item>SW</item>
+        <item>WSW</item>
+        <item>W</item>
+        <item>WNW</item>
+        <item>NW</item>
+        <item>NNW</item>
+    </string-array>
+</resources>
