@@ -29,7 +29,7 @@ APK : `dist/SatTemps-v1.1.0-debug.apk` (ou `./gradlew assembleDebug`).
   de visee ralentis hors premier plan.
 
 **Qualite du code**
-- 46 tests unitaires JVM : visee geostationnaire, analyse du ciel GNSS, encodage NTP, priorite des
+- 54 tests unitaires JVM : visee geostationnaire, analyse du ciel GNSS, encodage NTP, priorite des
   sources de temps et espacement des reessais, mesure directionnelle 360°, conversions d'azimut.
 - Logique de calcul separee des API Android (`SkyAnalysis`, `NtpTimestamp`, `Azimuth`) et KDoc sur
   les classes principales.
