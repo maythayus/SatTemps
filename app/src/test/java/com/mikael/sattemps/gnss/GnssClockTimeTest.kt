@@ -99,4 +99,33 @@ class GnssClockTimeTest {
 
         assertEquals(1L, offset)
     }
+
+    @Test
+    fun `une mesure complete est exploitable`() {
+        assertEquals(RawClockStatus.ACTIVE, GnssClockMath.classify(sample()))
+    }
+
+    @Test
+    fun `sans fullBiasNanos l'heure GPS n'est pas encore calculee`() {
+        assertEquals(
+            RawClockStatus.NO_GPS_TIME,
+            GnssClockMath.classify(sample().copy(fullBiasNanos = null))
+        )
+    }
+
+    @Test
+    fun `sans elapsedRealtimeNanos la mesure ne peut pas etre datee`() {
+        assertEquals(
+            RawClockStatus.NO_ELAPSED_REALTIME,
+            GnssClockMath.classify(sample().copy(elapsedRealtimeNanos = null))
+        )
+    }
+
+    @Test
+    fun `un temps GPS incoherent est classe comme non calcule`() {
+        assertEquals(
+            RawClockStatus.NO_GPS_TIME,
+            GnssClockMath.classify(sample().copy(fullBiasNanos = receiverNanos + 1L))
+        )
+    }
 }

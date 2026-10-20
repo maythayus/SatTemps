@@ -162,6 +162,9 @@ private fun TimeTab(
                 )
             }
             InfoRow(stringResource(R.string.label_raw_clock), rawClockText(gnss.rawClock))
+            gnss.rawSignalCount?.let {
+                InfoRow(stringResource(R.string.label_raw_signals), it.toString())
+            }
             time.ntpServer?.let { server ->
                 InfoRow(
                     stringResource(R.string.label_ntp_server),
@@ -597,6 +600,8 @@ private fun timeSourceText(source: TimeSource): String = when (source) {
 private fun rawClockText(status: RawClockStatus): String = when (status) {
     RawClockStatus.ACTIVE -> stringResource(R.string.raw_clock_active)
     RawClockStatus.WAITING -> stringResource(R.string.raw_clock_waiting)
+    RawClockStatus.NO_GPS_TIME -> stringResource(R.string.raw_clock_no_gps_time)
+    RawClockStatus.NO_ELAPSED_REALTIME -> stringResource(R.string.raw_clock_no_elapsed)
     RawClockStatus.NOT_SUPPORTED -> stringResource(R.string.raw_clock_not_supported)
     RawClockStatus.ANDROID_TOO_OLD -> stringResource(R.string.raw_clock_android_too_old)
 }

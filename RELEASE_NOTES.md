@@ -17,7 +17,10 @@ APK : `dist/SatTemps-v1.2.0-debug.apk` (ou `./gradlew assembleDebug`).
 - Ordre de priorite : GNSS atomique, puis fix GNSS, puis NTP, puis horloge du telephone. Si les
   mesures brutes s'arretent plus de 10 s, l'application revient a la source suivante.
 - Onglet Heure : nom de la source en clair, incertitude de l'horloge GNSS (ns, µs ou ms), ecart
-  GPS - UTC et etat des mesures brutes (actives, en attente, non fournies, Android 11 requis).
+  GPS - UTC et etat des mesures brutes.
+- Diagnostic des mesures brutes : aucune mesure recue, mesures recues mais heure GPS pas encore
+  calculee, horloge GNSS non reliee a l'horloge du telephone, non fournies, Android 11 requis, ou
+  actives ; avec le nombre de signaux bruts recus.
 
 ### Corrections
 
@@ -35,7 +38,7 @@ APK : `dist/SatTemps-v1.2.0-debug.apk` (ou `./gradlew assembleDebug`).
 
 ### Verification
 
-- 66 tests unitaires (dont le calcul `GnssClock` et la priorite des sources), `lint` et
+- 70 tests unitaires (dont le calcul `GnssClock` et la priorite des sources), `lint` et
   compilation verifies. Precision reelle a confirmer sur telephone, a ciel ouvert.
 
 ## v1.1.1 — 19 octobre 2026

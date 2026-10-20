@@ -33,12 +33,15 @@
     <string name="label_gnss_clock_uncertainty">Incertitude horloge GNSS</string>
     <string name="label_gps_minus_utc">Ecart GPS - UTC</string>
     <string name="label_raw_clock">Mesures GNSS brutes</string>
+    <string name="label_raw_signals">Signaux bruts recus</string>
     <string name="source_system">Horloge du telephone</string>
     <string name="source_ntp">Serveur NTP (internet)</string>
     <string name="source_gnss">GNSS (fix de position)</string>
     <string name="source_gnss_atomic">GNSS atomique (horloge du recepteur)</string>
     <string name="raw_clock_active">Actives</string>
-    <string name="raw_clock_waiting">En attente des satellites…</string>
+    <string name="raw_clock_waiting">Aucune mesure recue du recepteur</string>
+    <string name="raw_clock_no_gps_time">Mesures recues, heure GPS pas encore calculee (ciel ouvert)</string>
+    <string name="raw_clock_no_elapsed">Horloge GNSS non reliee a l\'horloge du telephone</string>
     <string name="raw_clock_not_supported">Non fournies par ce telephone</string>
     <string name="raw_clock_android_too_old">Android 11 minimum requis</string>
     <string name="label_last_sync">Derniere synchro</string>

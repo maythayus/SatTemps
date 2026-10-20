@@ -62,6 +62,14 @@ object GnssClockMath {
         return GnssClockTime(utcNanos, leap, ceil(uncertainty).toLong())
     }
 
+    /** Explique pourquoi une mesure brute est exploitable ou non. */
+    fun classify(sample: GnssClockSample): RawClockStatus = when {
+        sample.fullBiasNanos == null -> RawClockStatus.NO_GPS_TIME
+        sample.elapsedRealtimeNanos == null -> RawClockStatus.NO_ELAPSED_REALTIME
+        utcAt(sample) == null -> RawClockStatus.NO_GPS_TIME
+        else -> RawClockStatus.ACTIVE
+    }
+
     /**
      * Decalage a ajouter a l'horloge systeme pour obtenir le temps GNSS, en millisecondes.
      * [systemMillisNow] et [elapsedNowNanos] doivent etre lus au meme moment.
