@@ -60,6 +60,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         gnss.onGnssTimeOffset = timeSync::onGnssTimeOffset
         gnss.onGnssTimeLost = timeSync::onGnssTimeLost
+        gnss.onGnssClockOffset = timeSync::onGnssClockOffset
+        gnss.onGnssClockLost = timeSync::onGnssClockLost
 
         viewModelScope.launch {
             while (isActive) {

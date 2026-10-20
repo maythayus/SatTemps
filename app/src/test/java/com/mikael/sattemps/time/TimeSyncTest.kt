@@ -86,4 +86,44 @@ class TimeSyncTest {
         assertEquals(60_000L, retryDelayMillis(3))
         assertTrue(retryDelayMillis(MAX_BACKOFF_STEPS) <= 4 * 60 * 1000L)
     }
+
+    @Test
+    fun `l'horloge GNSS brute est prioritaire sur le fix GNSS et NTP`() {
+        val state = resolveTimeSource(
+            TimeSyncState(
+                ntpOffsetMillis = -320L,
+                ntpRoundTripMillis = 48L,
+                gnssOffsetMillis = -280L,
+                gnssClockOffsetMillis = -283L,
+                gnssClockUncertaintyNanos = 40L
+            )
+        )
+
+        assertEquals(TimeSource.GNSS_ATOMIQUE, state.source)
+        assertEquals(-283L, state.offsetMillis)
+        assertEquals(1L, state.uncertaintyMillis)
+    }
+
+    @Test
+    fun `une incertitude d'horloge GNSS superieure a la milliseconde est arrondie au dessus`() {
+        val state = resolveTimeSource(
+            TimeSyncState(gnssClockOffsetMillis = 12L, gnssClockUncertaintyNanos = 2_000_001L)
+        )
+
+        assertEquals(3L, state.uncertaintyMillis)
+    }
+
+    @Test
+    fun `sans mesures brutes on retombe sur le fix GNSS`() {
+        val state = resolveTimeSource(
+            TimeSyncState(
+                source = TimeSource.GNSS_ATOMIQUE,
+                gnssOffsetMillis = -280L,
+                gnssClockOffsetMillis = null
+            )
+        )
+
+        assertEquals(TimeSource.GNSS, state.source)
+        assertEquals(-280L, state.offsetMillis)
+    }
 }

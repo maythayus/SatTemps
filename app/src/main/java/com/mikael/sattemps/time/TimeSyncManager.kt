@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Origine du temps affiche, du plus precis au moins precis. */
-enum class TimeSource { SYSTEME, NTP, GNSS }
+enum class TimeSource { SYSTEME, NTP, GNSS, GNSS_ATOMIQUE }
 
 data class TimeSyncState(
     val source: TimeSource = TimeSource.SYSTEME,
@@ -24,6 +24,10 @@ data class TimeSyncState(
     val ntpRoundTripMillis: Long? = null,
     val ntpServer: String? = null,
     val gnssOffsetMillis: Long? = null,
+    /** Decalage issu de l'horloge brute du recepteur GNSS (`GnssClock`). */
+    val gnssClockOffsetMillis: Long? = null,
+    val gnssClockUncertaintyNanos: Long? = null,
+    val gpsMinusUtcSeconds: Int? = null,
     val lastSyncElapsedRealtime: Long? = null,
     /** Synchronisation NTP en cours : permet d'afficher un etat de chargement. */
     val syncing: Boolean = false,
@@ -43,6 +47,12 @@ data class TimeSyncState(
  * Fonction pure, sans dependance Android, afin d'etre couverte par des tests unitaires.
  */
 internal fun resolveTimeSource(state: TimeSyncState): TimeSyncState = when {
+    state.gnssClockOffsetMillis != null -> state.copy(
+        source = TimeSource.GNSS_ATOMIQUE,
+        offsetMillis = state.gnssClockOffsetMillis,
+        uncertaintyMillis = clockUncertaintyMillis(state.gnssClockUncertaintyNanos)
+    )
+
     state.gnssOffsetMillis != null -> state.copy(
         source = TimeSource.GNSS,
         offsetMillis = state.gnssOffsetMillis,
@@ -62,6 +72,10 @@ internal fun resolveTimeSource(state: TimeSyncState): TimeSyncState = when {
     )
 }
 
+/** L'horloge systeme n'est lue qu'a la milliseconde : l'incertitude affichee ne descend pas dessous. */
+private fun clockUncertaintyMillis(uncertaintyNanos: Long?): Long =
+    (((uncertaintyNanos ?: 0L) + 999_999L) / 1_000_000L).coerceAtLeast(1L)
+
 private const val GNSS_UNCERTAINTY_MILLIS = 50L
 private const val SYSTEM_UNCERTAINTY_MILLIS = 1000L
 
@@ -77,8 +91,8 @@ private const val BASE_INTERVAL_MILLIS = 5 * 60 * 1000L
 internal const val MAX_BACKOFF_STEPS = 4
 
 /**
- * Fournit un temps de reference precis : le temps GNSS (issu du fix satellite) est
- * prioritaire, sinon un serveur NTP, sinon l'horloge du telephone.
+ * Fournit un temps de reference precis : l'horloge brute du recepteur GNSS, puis le
+ * temps du fix satellite, sinon un serveur NTP, sinon l'horloge du telephone.
  *
  * En cas d'echec reseau, les tentatives sont espacees progressivement pour ne pas
  * vider la batterie hors couverture.
@@ -115,6 +129,26 @@ class TimeSyncManager(private val scope: CoroutineScope) {
     fun onGnssTimeLost() {
         if (_state.value.gnssOffsetMillis == null) return
         _state.value = resolveTimeSource(_state.value.copy(gnssOffsetMillis = null))
+    }
+
+    /** Decalage mesure par l'horloge brute du recepteur GNSS, la reference la plus precise. */
+    fun onGnssClockOffset(offsetMillis: Long, uncertaintyNanos: Long, gpsMinusUtcSeconds: Int) {
+        _state.value = resolveTimeSource(
+            _state.value.copy(
+                gnssClockOffsetMillis = offsetMillis,
+                gnssClockUncertaintyNanos = uncertaintyNanos,
+                gpsMinusUtcSeconds = gpsMinusUtcSeconds,
+                lastSyncElapsedRealtime = SystemClock.elapsedRealtime()
+            )
+        )
+    }
+
+    /** Plus de mesures brutes recentes : on retombe sur le fix GNSS, NTP ou l'horloge systeme. */
+    fun onGnssClockLost() {
+        if (_state.value.gnssClockOffsetMillis == null) return
+        _state.value = resolveTimeSource(
+            _state.value.copy(gnssClockOffsetMillis = null, gnssClockUncertaintyNanos = null)
+        )
     }
 
     fun forceNtpSync() {
