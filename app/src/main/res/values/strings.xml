@@ -30,6 +30,20 @@
     <string name="label_uncertainty">Incertitude</string>
     <string name="label_ntp_server">Serveur NTP</string>
     <string name="label_gps_offset">Ecart mesure par GPS</string>
+    <string name="label_gnss_clock_uncertainty">Incertitude horloge GNSS</string>
+    <string name="label_gps_minus_utc">Ecart GPS - UTC</string>
+    <string name="label_raw_clock">Mesures GNSS brutes</string>
+    <string name="label_raw_signals">Signaux bruts recus</string>
+    <string name="source_system">Horloge du telephone</string>
+    <string name="source_ntp">Serveur NTP (internet)</string>
+    <string name="source_gnss">GNSS (fix de position)</string>
+    <string name="source_gnss_atomic">GNSS atomique (horloge du recepteur)</string>
+    <string name="raw_clock_active">Actives</string>
+    <string name="raw_clock_waiting">Aucune mesure recue du recepteur</string>
+    <string name="raw_clock_no_gps_time">Mesures recues, heure GPS pas encore calculee (ciel ouvert)</string>
+    <string name="raw_clock_no_elapsed">Horloge GNSS non reliee a l\'horloge du telephone</string>
+    <string name="raw_clock_not_supported">Non fournies par ce telephone</string>
+    <string name="raw_clock_android_too_old">Android 11 minimum requis</string>
     <string name="label_last_sync">Derniere synchro</string>
     <string name="action_resync">Resynchroniser maintenant</string>
     <string name="action_syncing">Synchronisation…</string>
@@ -72,6 +86,9 @@
     <string name="value_dash" translatable="false">-</string>
     <string name="value_millis" translatable="false">%1$d ms</string>
     <string name="value_uncertainty" translatable="false">± %1$d ms</string>
+    <string name="value_nanos" translatable="false">± %1$d ns</string>
+    <string name="value_micros" translatable="false">± %1$s µs</string>
+    <string name="value_millis_decimal" translatable="false">± %1$s ms</string>
     <string name="value_ntp_server">%1$s (aller-retour %2$d ms)</string>
     <string name="value_seconds_ago">il y a %1$d s</string>
     <string name="value_seconds" translatable="false">%1$d s</string>

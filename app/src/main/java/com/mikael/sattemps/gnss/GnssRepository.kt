@@ -2,13 +2,16 @@ package com.mikael.sattemps.gnss
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.location.GnssMeasurementsEvent
 import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.annotation.RequiresApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +39,20 @@ enum class GnssIssue {
     SIGNAL_LOST
 }
 
+/** Disponibilite de l'horloge brute du recepteur (`GnssClock`). */
+enum class RawClockStatus {
+    /** Android 11 minimum pour relier l'horloge GNSS a celle du telephone. */
+    ANDROID_TOO_OLD,
+    NOT_SUPPORTED,
+    /** Abonnement accepte mais aucune mesure recue recemment. */
+    WAITING,
+    /** Mesures recues, mais le recepteur n'a pas encore estime le temps GPS (`fullBiasNanos`). */
+    NO_GPS_TIME,
+    /** Le recepteur ne fournit pas `elapsedRealtimeNanos` : impossible de dater la mesure. */
+    NO_ELAPSED_REALTIME,
+    ACTIVE
+}
+
 data class GnssState(
     val location: Location? = null,
     val satellites: List<Satellite> = emptyList(),
@@ -48,7 +65,10 @@ data class GnssState(
     /** Age du dernier fix en secondes, `null` si aucun fix. */
     val fixAgeSeconds: Long? = null,
     /** Probleme courant empechant une mesure fiable, `null` si tout va bien. */
-    val issue: GnssIssue? = null
+    val issue: GnssIssue? = null,
+    val rawClock: RawClockStatus = RawClockStatus.WAITING,
+    /** Nombre de signaux satellites dans la derniere mesure brute, `null` si aucune recente. */
+    val rawSignalCount: Int? = null
 ) {
     /** Satellite offrant le meilleur signal parmi ceux au dessus de l'horizon. */
     val bestSatellite: Satellite? get() = SkyAnalysis.bestSatellite(satellites)
@@ -81,6 +101,33 @@ class GnssRepository(context: Context) {
 
     /** Emis lorsque le fix GNSS devient trop ancien pour servir de reference de temps. */
     var onGnssTimeLost: (() -> Unit)? = null
+
+    /** Emis a chaque mesure brute : decalage (ms), incertitude (ns), GPS - UTC (s). */
+    var onGnssClockOffset: ((Long, Long, Int) -> Unit)? = null
+
+    /** Emis lorsque les mesures brutes cessent d'arriver. */
+    var onGnssClockLost: (() -> Unit)? = null
+
+    private var lastClockElapsedMillis: Long? = null
+    private var lastEventElapsedMillis: Long? = null
+
+    private val measurementsCallback: GnssMeasurementsEvent.Callback? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            object : GnssMeasurementsEvent.Callback() {
+                override fun onGnssMeasurementsReceived(event: GnssMeasurementsEvent) {
+                    onClockSample(clockSample(event), event.measurements.size)
+                }
+
+                @Deprecated("Remplace par GnssCapabilities a partir d'Android 12")
+                override fun onStatusChanged(status: Int) {
+                    if (status == STATUS_NOT_SUPPORTED) {
+                        _state.value = _state.value.copy(rawClock = RawClockStatus.NOT_SUPPORTED)
+                    }
+                }
+            }
+        } else {
+            null
+        }
 
     private val locationListener = LocationListener { location ->
         if (location.provider == LocationManager.GPS_PROVIDER) {
@@ -129,6 +176,7 @@ class GnssRepository(context: Context) {
 
         try {
             manager.registerGnssStatusCallback(gnssCallback, handler)
+            registerMeasurements(manager)
             manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let {
                 _state.value = _state.value.copy(location = it)
             }
@@ -159,6 +207,7 @@ class GnssRepository(context: Context) {
         runCatching {
             manager.removeUpdates(locationListener)
             manager.unregisterGnssStatusCallback(gnssCallback)
+            measurementsCallback?.let { manager.unregisterGnssMeasurementsCallback(it) }
         }
         _state.value = _state.value.copy(listening = false)
     }
@@ -176,6 +225,21 @@ class GnssRepository(context: Context) {
         val ageSeconds = _state.value.location?.let { fixAgeMillis(it) / 1000L }
         val stale = ageSeconds != null && ageSeconds > STALE_FIX_SECONDS
         if (stale || !gpsEnabled) onGnssTimeLost?.invoke()
+
+        val now = SystemClock.elapsedRealtime()
+        val clockAge = lastClockElapsedMillis?.let { now - it }
+        if (!gpsEnabled || (clockAge != null && clockAge > FRESH_FIX_MILLIS)) {
+            lastClockElapsedMillis = null
+            onGnssClockLost?.invoke()
+        }
+        val eventAge = lastEventElapsedMillis?.let { now - it }
+        if (!gpsEnabled || (eventAge != null && eventAge > FRESH_FIX_MILLIS)) {
+            lastEventElapsedMillis = null
+            if (_state.value.rawClock in RECEIVING_STATUSES) {
+                _state.value =
+                    _state.value.copy(rawClock = RawClockStatus.WAITING, rawSignalCount = null)
+            }
+        }
 
         _state.value = _state.value.copy(
             gpsEnabled = gpsEnabled,
@@ -204,6 +268,65 @@ class GnssRepository(context: Context) {
         return gnssNow - System.currentTimeMillis()
     }
 
+    @SuppressLint("MissingPermission")
+    private fun registerMeasurements(manager: LocationManager) {
+        val callback = measurementsCallback
+        val status = when {
+            callback == null -> RawClockStatus.ANDROID_TOO_OLD
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                !manager.gnssCapabilities.hasMeasurements() -> RawClockStatus.NOT_SUPPORTED
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                manager.registerGnssMeasurementsCallback(appContext.mainExecutor, callback) ->
+                RawClockStatus.WAITING
+            else -> RawClockStatus.NOT_SUPPORTED
+        }
+        _state.value = _state.value.copy(rawClock = status)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun clockSample(event: GnssMeasurementsEvent): GnssClockSample {
+        val clock = event.clock
+        return GnssClockSample(
+            timeNanos = clock.timeNanos,
+            fullBiasNanos = if (clock.hasFullBiasNanos()) clock.fullBiasNanos else null,
+            biasNanos = if (clock.hasBiasNanos()) clock.biasNanos else null,
+            biasUncertaintyNanos =
+                if (clock.hasBiasUncertaintyNanos()) clock.biasUncertaintyNanos else null,
+            leapSecond = if (clock.hasLeapSecond()) clock.leapSecond else null,
+            elapsedRealtimeNanos =
+                if (clock.hasElapsedRealtimeNanos()) clock.elapsedRealtimeNanos else null,
+            elapsedRealtimeUncertaintyNanos =
+                if (clock.hasElapsedRealtimeUncertaintyNanos()) {
+                    clock.elapsedRealtimeUncertaintyNanos
+                } else {
+                    null
+                }
+        )
+    }
+
+    /**
+     * L'horloge du recepteur est asservie aux horloges atomiques des satellites ; son
+     * `elapsedRealtimeNanos` la relie a l'horloge monotone du telephone sans latence de remontee.
+     */
+    private fun onClockSample(sample: GnssClockSample, signalCount: Int) {
+        lastEventElapsedMillis = SystemClock.elapsedRealtime()
+        val status = GnssClockMath.classify(sample)
+        if (_state.value.rawClock != status || _state.value.rawSignalCount != signalCount) {
+            _state.value = _state.value.copy(rawClock = status, rawSignalCount = signalCount)
+        }
+        if (status != RawClockStatus.ACTIVE) return
+        val sampleElapsed = sample.elapsedRealtimeNanos ?: return
+        val time = GnssClockMath.utcAt(sample) ?: return
+        val offset = GnssClockMath.systemOffsetMillis(
+            time = time,
+            sampleElapsedNanos = sampleElapsed,
+            systemMillisNow = System.currentTimeMillis(),
+            elapsedNowNanos = SystemClock.elapsedRealtimeNanos()
+        )
+        lastClockElapsedMillis = SystemClock.elapsedRealtime()
+        onGnssClockOffset?.invoke(offset, time.uncertaintyNanos, time.gpsMinusUtcSeconds)
+    }
+
     private fun fixAgeMillis(location: Location): Long =
         SystemClock.elapsedRealtime() - location.elapsedRealtimeNanos / 1_000_000L
 
@@ -224,5 +347,11 @@ class GnssRepository(context: Context) {
 
         /** Au dela, on considere le signal GPS perdu. */
         const val STALE_FIX_SECONDS = 30L
+
+        val RECEIVING_STATUSES = setOf(
+            RawClockStatus.NO_GPS_TIME,
+            RawClockStatus.NO_ELAPSED_REALTIME,
+            RawClockStatus.ACTIVE
+        )
     }
 }

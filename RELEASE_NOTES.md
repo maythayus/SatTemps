@@ -1,5 +1,46 @@
 # Notes de version
 
+## v1.2.0 — 20 octobre 2026
+
+Heure issue directement de l'horloge du recepteur GNSS, asservie aux horloges atomiques des
+satellites, et affichage de l'heure corrige.
+
+APK : `dist/SatTemps-v1.2.0-debug.apk` (ou `./gradlew assembleDebug`).
+
+### Nouveautes
+
+- Nouvelle source de temps « GNSS atomique » : l'application lit les mesures GNSS brutes
+  (`GnssClock`) et calcule le temps GPS (`timeNanos - fullBiasNanos - biasNanos`), converti en UTC
+  avec les secondes intercalaires du recepteur (18 s par defaut).
+- L'heure est reliee a l'horloge interne du telephone par `elapsedRealtimeNanos`, sans la latence
+  de remontee du fix de position.
+- Ordre de priorite : GNSS atomique, puis fix GNSS, puis NTP, puis horloge du telephone. Si les
+  mesures brutes s'arretent plus de 10 s, l'application revient a la source suivante.
+- Onglet Heure : nom de la source en clair, incertitude de l'horloge GNSS (ns, µs ou ms), ecart
+  GPS - UTC et etat des mesures brutes.
+- Diagnostic des mesures brutes : aucune mesure recue, mesures recues mais heure GPS pas encore
+  calculee, horloge GNSS non reliee a l'horloge du telephone, non fournies, Android 11 requis, ou
+  actives ; avec le nombre de signaux bruts recus.
+
+### Corrections
+
+- L'heure avec millisecondes ne passe plus a la ligne et ne chevauche plus les secondes : sa taille
+  s'adapte a la largeur de l'ecran et a la taille de police du telephone.
+
+### Limites
+
+- Mesures brutes : Android 11 minimum et un telephone qui les fournit. Sinon, l'application
+  utilise les sources precedentes comme avant.
+- L'horloge systeme du telephone n'est pas modifiee (permission reservee aux applications
+  systeme) : seule l'heure affichee par SatTemps est corrigee.
+- L'horloge du telephone n'etant lue qu'a la milliseconde, l'incertitude totale affichee ne
+  descend pas sous ± 1 ms.
+
+### Verification
+
+- 70 tests unitaires (dont le calcul `GnssClock` et la priorite des sources), `lint` et
+  compilation verifies. Precision reelle a confirmer sur telephone, a ciel ouvert.
+
 ## v1.1.1 — 19 octobre 2026
 
 Version de maintenance : meme fonctionnement que la v1.1.0, publiee depuis la branche principale.

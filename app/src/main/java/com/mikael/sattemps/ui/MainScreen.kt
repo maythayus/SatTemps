@@ -1,6 +1,7 @@
 package com.mikael.sattemps.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,11 +34,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,11 +49,13 @@ import com.mikael.sattemps.R
 import com.mikael.sattemps.geo.DishPointing
 import com.mikael.sattemps.gnss.GnssIssue
 import com.mikael.sattemps.gnss.GnssState
+import com.mikael.sattemps.gnss.RawClockStatus
 import com.mikael.sattemps.network.MobileIssue
 import com.mikael.sattemps.network.MobileState
 import com.mikael.sattemps.network.ScanState
 import com.mikael.sattemps.sensors.CompassState
 import com.mikael.sattemps.time.SntpClient
+import com.mikael.sattemps.time.TimeSource
 import com.mikael.sattemps.time.TimeSyncState
 import java.time.Instant
 import java.time.ZoneId
@@ -116,14 +121,20 @@ private fun TimeTab(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SectionCard(stringResource(R.string.section_exact_time)) {
-            Text(
-                text = zoned.format(TIME_FORMAT),
-                fontSize = 56.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val fontSize = clockFontSize(maxWidth.value)
+                Text(
+                    text = zoned.format(TIME_FORMAT),
+                    fontSize = fontSize,
+                    lineHeight = fontSize * 1.2f,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             Text(
                 text = zoned.format(dateFormat).replaceFirstChar { it.uppercase() },
                 modifier = Modifier.fillMaxWidth(),
@@ -132,7 +143,7 @@ private fun TimeTab(
             Spacer(Modifier.height(8.dp))
             InfoRow(stringResource(R.string.label_utc), utc.format(TIME_FORMAT))
             InfoRow(stringResource(R.string.label_timezone), ZoneId.systemDefault().id)
-            InfoRow(stringResource(R.string.label_source), time.source.name)
+            InfoRow(stringResource(R.string.label_source), timeSourceText(time.source))
             InfoRow(
                 stringResource(R.string.label_clock_offset),
                 stringResource(R.string.value_millis, time.offsetMillis)
@@ -141,6 +152,19 @@ private fun TimeTab(
                 stringResource(R.string.label_uncertainty),
                 stringResource(R.string.value_uncertainty, time.uncertaintyMillis)
             )
+            time.gnssClockUncertaintyNanos?.let {
+                InfoRow(stringResource(R.string.label_gnss_clock_uncertainty), formatNanos(it))
+            }
+            time.gpsMinusUtcSeconds?.let {
+                InfoRow(
+                    stringResource(R.string.label_gps_minus_utc),
+                    stringResource(R.string.value_seconds, it)
+                )
+            }
+            InfoRow(stringResource(R.string.label_raw_clock), rawClockText(gnss.rawClock))
+            gnss.rawSignalCount?.let {
+                InfoRow(stringResource(R.string.label_raw_signals), it.toString())
+            }
             time.ntpServer?.let { server ->
                 InfoRow(
                     stringResource(R.string.label_ntp_server),
@@ -553,6 +577,42 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
+/**
+ * Taille de l'heure pour que "HH:mm:ss.SSS" tienne sur une ligne, quelle que soit la
+ * largeur de l'ecran ou la taille de police choisie dans les reglages.
+ */
+@Composable
+private fun clockFontSize(availableWidthDp: Float): TextUnit {
+    val fontScale = LocalDensity.current.fontScale
+    val fittingSp = availableWidthDp / (CLOCK_CHARACTERS * MONOSPACE_ADVANCE_EM) / fontScale
+    return fittingSp.coerceAtMost(MAX_CLOCK_FONT_SP).sp
+}
+
+@Composable
+private fun timeSourceText(source: TimeSource): String = when (source) {
+    TimeSource.SYSTEME -> stringResource(R.string.source_system)
+    TimeSource.NTP -> stringResource(R.string.source_ntp)
+    TimeSource.GNSS -> stringResource(R.string.source_gnss)
+    TimeSource.GNSS_ATOMIQUE -> stringResource(R.string.source_gnss_atomic)
+}
+
+@Composable
+private fun rawClockText(status: RawClockStatus): String = when (status) {
+    RawClockStatus.ACTIVE -> stringResource(R.string.raw_clock_active)
+    RawClockStatus.WAITING -> stringResource(R.string.raw_clock_waiting)
+    RawClockStatus.NO_GPS_TIME -> stringResource(R.string.raw_clock_no_gps_time)
+    RawClockStatus.NO_ELAPSED_REALTIME -> stringResource(R.string.raw_clock_no_elapsed)
+    RawClockStatus.NOT_SUPPORTED -> stringResource(R.string.raw_clock_not_supported)
+    RawClockStatus.ANDROID_TOO_OLD -> stringResource(R.string.raw_clock_android_too_old)
+}
+
+@Composable
+private fun formatNanos(nanos: Long): String = when {
+    nanos < 1_000L -> stringResource(R.string.value_nanos, nanos)
+    nanos < 1_000_000L -> stringResource(R.string.value_micros, formatDecimal(nanos / 1e3, 1))
+    else -> stringResource(R.string.value_millis_decimal, formatDecimal(nanos / 1e6, 2))
+}
+
 @Composable
 private fun gnssIssueText(issue: GnssIssue, fixAgeSeconds: Long?): String = when (issue) {
     GnssIssue.NO_SERVICE -> stringResource(R.string.gnss_no_service)
@@ -611,3 +671,7 @@ private fun formatDecimal(value: Double, decimals: Int): String =
     String.format(Locale.getDefault(), "%.${decimals}f", value)
 
 private const val MAX_SATELLITE_ROWS = 20
+private const val CLOCK_CHARACTERS = 12
+/** Largeur d'un caractere monospace en gras, avec une marge de securite. */
+private const val MONOSPACE_ADVANCE_EM = 0.66f
+private const val MAX_CLOCK_FONT_SP = 56f
