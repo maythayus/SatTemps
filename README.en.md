@@ -1,5 +1,7 @@
 # SatTemps
 
+*Version francaise : [README.md](README.md)*
+
 Android app (Kotlin / Jetpack Compose) that shows the exact time (hour, minute, second, millisecond) and the best orientation to pick up:
 - GNSS satellites (GPS, Galileo, GLONASS, BeiDou),
 - a geostationary satellite (dish: azimuth, elevation, LNB tilt),
@@ -8,8 +10,9 @@ Android app (Kotlin / Jetpack Compose) that shows the exact time (hour, minute, 
 ## Features
 
 ### "Time" tab
-- Millisecond clock based on GNSS time from the satellite fix (first choice), otherwise an NTP server (`time.google.com`, `pool.ntp.org`, `time.cloudflare.com`), otherwise the phone clock.
+- Millisecond clock based on the GNSS atomic clock (raw GNSS measurements, `GnssClock`; first choice), otherwise GNSS time from the satellite fix, otherwise an NTP server (`time.google.com`, `pool.ntp.org`, `time.cloudflare.com`), otherwise the phone clock.
 - Shows the measured offset from the phone clock and the estimated uncertainty.
+- Raw GNSS measurement status (active, waiting, GPS time not computed yet, not provided by the phone...), GNSS clock uncertainty and GPS - UTC offset.
 - Local time + UTC, GPS position (latitude, longitude, altitude, accuracy).
 
 ### "GPS Sky" tab
@@ -45,7 +48,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## Tests
 
-The calculations (geostationary pointing, GNSS sky analysis, NTP encoding, time source priority, 360° directional scan, UI azimuths) are covered by JVM unit tests, no emulator needed:
+The calculations (geostationary pointing, GNSS sky analysis, raw GNSS clock, NTP encoding, time source priority, 360° directional scan, UI azimuths) are covered by JVM unit tests, no emulator needed:
 
 ```bash
 ./gradlew test
@@ -68,6 +71,7 @@ All displayed texts are in `app/src/main/res/values/strings.xml` (French, defaul
 
 ## Time accuracy
 
+- GNSS atomic (Android 11+ and a phone that provides raw measurements): GPS time is computed from the receiver clock (`timeNanos - fullBiasNanos - biasNanos`), which is disciplined by the satellites' atomic clocks, then converted to UTC with the leap seconds (18 s by default). It is tied to the phone clock through `elapsedRealtimeNanos`, without the fix latency. Since the phone clock is read to the millisecond, the displayed uncertainty does not go below ± 1 ms. If raw measurements stop for more than 10 s, the app falls back to the next source.
 - GNSS: the GPS fix carries a UTC timestamp derived from the satellites' atomic clocks. It is compared with the phone's monotonic clock (`elapsedRealtimeNanos`) to remove the fix reporting latency; typical accuracy is a few tens of milliseconds.
 - NTP: standard SNTP algorithm; the displayed uncertainty is half the round-trip time.
 - Android does not expose the leap second; the displayed time follows the UTC scale.
