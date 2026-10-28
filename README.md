@@ -1,58 +1,43 @@
 # SatTemps
 
-*English version: [README.en.md](README.en.md)*
+Android app (Kotlin / Jetpack Compose) that shows the exact time (hour, minute, second, millisecond) and the best orientation to pick up:
+- GNSS satellites (GPS, Galileo, GLONASS, BeiDou),
+- a geostationary satellite (dish: azimuth, elevation, LNB tilt),
+- the strongest 5G NR / 4G LTE cell tower.
 
-Application Android (Kotlin / Jetpack Compose) qui affiche **l'heure exacte** (heure, minute,
-seconde, milliseconde) et **la meilleure orientation** pour capter :
+## Features
 
-- les satellites GNSS (GPS, Galileo, GLONASS, BeiDou),
-- un satellite geostationnaire (parabole : azimut, elevation, inclinaison LNB),
-- l'antenne relais mobile 5G NR / 4G LTE la plus forte.
+### "Time" tab
+- Millisecond clock based on GNSS time from the satellite fix (first choice), otherwise an NTP server (`time.google.com`, `pool.ntp.org`, `time.cloudflare.com`), otherwise the phone clock.
+- Shows the measured offset from the phone clock and the estimated uncertainty.
+- Local time + UTC, GPS position (latitude, longitude, altitude, accuracy).
 
-## Fonctionnalites
+### "GPS Sky" tab
+- Polar sky view: each satellite is placed by its azimuth and elevation; color and size show signal quality (C/N0 in dB-Hz).
+- The view rotates with the phone (compass corrected for magnetic declination: true north).
+- Best direction = signal-weighted vector average of the azimuths, with the rotation angle to apply.
 
-### Onglet « Heure »
-- Horloge a la milliseconde basee sur l'**horloge GNSS atomique** (mesures GNSS brutes
-  `GnssClock`, prioritaire), sinon sur le **temps GNSS** du fix satellite, sinon sur
-  un serveur **NTP** (`time.google.com`, `pool.ntp.org`, `time.cloudflare.com`), sinon sur
-  l'horloge du telephone.
-- Affichage de l'ecart mesure avec l'horloge du telephone et de l'incertitude estimee.
-- Etat des mesures GNSS brutes (actives, en attente, heure GPS pas encore calculee, non fournies
-  par le telephone...), incertitude de l'horloge GNSS et ecart GPS - UTC.
-- Heure locale + UTC, position GPS (latitude, longitude, altitude, precision).
+### "Dish" tab
+- From the GPS position, computes pointing toward a dozen common geostationary satellites (Astra 19.2E, Hotbird 13E, Eutelsat 5W/7W, Nilesat, Turksat...).
+- Azimuth (true north), elevation, LNB tilt (skew), slant range, highest satellite.
 
-### Onglet « Ciel GPS »
-- Vue polaire du ciel : chaque satellite est place selon son azimut et son elevation, la couleur
-  et la taille indiquent la qualite du signal (C/N0 en dB-Hz).
-- La vue tourne avec le telephone (boussole corrigee de la declinaison magnetique : nord vrai).
-- Calcul de la **meilleure direction** = moyenne vectorielle des azimuts ponderee par le signal,
-  avec l'angle de rotation a effectuer.
+### "Network" tab
+- Operator, technology (5G NR / LTE / UMTS / GSM), serving cell and neighbor cells: power (SS-RSRP / RSRP), quality (RSRQ), SINR, bands, identifiers (NCI, PCI, TAC).
+- 360° directional scan: start the scan and slowly turn around; the app samples signal power per 15° sector and shows the direction of the best-received tower, along with the rotation to apply.
 
-### Onglet « Parabole »
-- A partir de la position GPS, calcul de la visee vers une douzaine de satellites
-  geostationnaires courants (Astra 19.2E, Hotbird 13E, Eutelsat 5W/7W, Nilesat, Turksat...).
-- Azimut (nord vrai), elevation, inclinaison LNB (skew), distance oblique, satellite le plus haut.
+## Build
 
-### Onglet « Reseau »
-- Operateur, technologie (5G NR / LTE / UMTS / GSM), cellule servante et cellules voisines :
-  puissance (SS-RSRP / RSRP), qualite (RSRQ), SINR, bandes, identifiants (NCI, PCI, TAC).
-- **Mesure directionnelle 360°** : demarrez la mesure et tournez lentement sur vous meme ;
-  l'application echantillonne la puissance du signal par secteur de 15° et indique la direction
-  du relais le mieux capte, ainsi que la rotation a effectuer.
-
-## Compilation
-
-Prerequis : JDK 17 et le SDK Android (plateforme 34, build-tools 34).
+Requirements: JDK 17 and the Android SDK (platform 34, build-tools 34).
 
 ```bash
-# Renseigner le chemin du SDK
-echo "sdk.dir=/chemin/vers/Android/sdk" > local.properties
+# Set the SDK path
+echo "sdk.dir=/path/to/Android/sdk" > local.properties
 
 ./gradlew assembleDebug
-# APK : app/build/outputs/apk/debug/app-debug.apk
+# APK: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Installation sur un telephone connecte en USB (debogage USB active) :
+Install on a phone connected over USB (USB debugging enabled):
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -60,53 +45,35 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## Tests
 
-Les calculs (visee geostationnaire, analyse du ciel GNSS, horloge GNSS brute, encodage NTP, priorite des sources de
-temps, mesure directionnelle 360°, azimuts de l'interface) sont couverts par des tests unitaires
-JVM, sans emulateur :
+The calculations (geostationary pointing, GNSS sky analysis, NTP encoding, time source priority, 360° directional scan, UI azimuths) are covered by JVM unit tests, no emulator needed:
 
 ```bash
 ./gradlew test
 ./gradlew lint
 ```
 
-Les essais terrain (plusieurs telephones, plusieurs regions, modems differents) restent a faire sur
-appareils reels.
+Field tests (several phones, several regions, different modems) still need to be done on real devices.
 
-## Langues
+## Languages
 
-Tous les textes affiches sont dans `app/src/main/res/values/strings.xml` (francais, langue par
-defaut) et `app/src/main/res/values-en/strings.xml` (anglais). Ajouter une langue revient a copier
-le fichier dans un dossier `values-xx`.
+All displayed texts are in `app/src/main/res/values/strings.xml` (French, default language) and `app/src/main/res/values-en/strings.xml` (English). To add a language, copy the file into a `values-xx` folder.
 
 ## Permissions
 
 | Permission | Usage |
 |---|---|
-| `ACCESS_FINE_LOCATION` | position GPS, etat des satellites, informations de cellule |
-| `READ_PHONE_STATE` | technologie reseau et identifiants de cellule |
-| `INTERNET` | synchronisation NTP |
+| `ACCESS_FINE_LOCATION` | GPS position, satellite status, cell information |
+| `READ_PHONE_STATE` | network technology and cell identifiers |
+| `INTERNET` | NTP synchronization |
 
-## Precision de l'heure
+## Time accuracy
 
-- **GNSS atomique** (Android 11+ et telephone fournissant les mesures brutes) : l'heure GPS est
-  calculee depuis l'horloge du recepteur (`timeNanos - fullBiasNanos - biasNanos`), asservie aux
-  horloges atomiques des satellites, puis convertie en UTC avec les secondes intercalaires
-  (18 s par defaut). Elle est reliee a l'horloge du telephone par `elapsedRealtimeNanos`, sans la
-  latence du fix. L'horloge du telephone etant lue a la milliseconde, l'incertitude affichee ne
-  descend pas sous ± 1 ms. Si les mesures brutes s'arretent plus de 10 s, l'application revient
-  a la source suivante.
-- **GNSS** : le fix GPS porte un horodatage UTC issu des horloges atomiques des satellites. On le
-  compare a l'horloge monotone du telephone (`elapsedRealtimeNanos`) pour retirer la latence de
-  remontee du fix ; precision typique de quelques dizaines de millisecondes.
-- **NTP** : algorithme SNTP classique, l'incertitude affichee vaut la moitie du temps aller-retour.
-- Android ne donne pas acces a la seconde intercalaire ; l'heure affichee suit l'echelle UTC.
+- GNSS: the GPS fix carries a UTC timestamp derived from the satellites' atomic clocks. It is compared with the phone's monotonic clock (`elapsedRealtimeNanos`) to remove the fix reporting latency; typical accuracy is a few tens of milliseconds.
+- NTP: standard SNTP algorithm; the displayed uncertainty is half the round-trip time.
+- Android does not expose the leap second; the displayed time follows the UTC scale.
 
-## Limites connues
+## Known limitations
 
-- Les informations de cellule voisine dependent du modem et du constructeur ; certains telephones
-  ne remontent que la cellule servante.
-- La direction de l'antenne relais est deduite de la puissance mesuree pendant la rotation
-  (le corps de l'utilisateur masque le signal du cote oppose) : c'est une estimation, pas une
-  triangulation.
-- La liste des satellites geostationnaires est statique et couvre l'Europe, l'Afrique et une
-  partie des Ameriques.
+- Neighbor cell information depends on the modem and manufacturer; some phones only report the serving cell.
+- The cell tower direction is inferred from the power measured during rotation (the user's body blocks the signal on the opposite side): it is an estimate, not a triangulation.
+- The list of geostationary satellites is static and covers Europe, Africa and part of the Americas.
