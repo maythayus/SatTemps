@@ -9,3 +9,6 @@
 .cxx
 local.properties
 app/build/
+
+# APK de debug : ne pas versionner, utiliser les releases
+dist/*.apk
